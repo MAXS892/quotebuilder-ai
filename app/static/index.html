@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QuoteBuilder AI</title>
+  <meta name="description" content="Describe a building job in plain English and get an itemised, priced quote and PDF in seconds.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231f4d3a'/><path d='M8 22V13l8-5 8 5v9h-5v-6h-6v6z' fill='%23f3c78a'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7"/><path d="M8 22V13l8-5 8 5v9h-5v-6h-6v6z"/></svg>
+        </span>
+        <div>
+          <strong>QuoteBuilder AI</strong>
+          <small id="biz-name">Oakmere Building Co. · demo</small>
+        </div>
+      </div>
+      <span id="ai-badge" class="badge">…</span>
+    </div>
+  </header>
+
+  <main class="wrap grid">
+    <section class="col">
+      <!-- STEP 1 -->
+      <div class="card">
+        <div class="step"><span>1</span> Describe the job</div>
+        <p class="muted">Paste the customer's enquiry exactly as it arrived – email, WhatsApp or phone notes.</p>
+        <textarea id="description" rows="5" placeholder="e.g. Hi, I'd like a 5x4m sandstone patio at the back and about 12 metres of new fencing, 1.8m high, down the side."></textarea>
+        <div class="examples">
+          <span class="muted small">Try:</span>
+          <button class="chip" data-ex="0">Patio + fence</button>
+          <button class="chip" data-ex="1">Wall + shed base</button>
+          <button class="chip" data-ex="2">Room refurb</button>
+        </div>
+        <details class="customer">
+          <summary>Customer details <span class="muted small">(optional, shown on the PDF)</span></summary>
+          <div class="cust-grid">
+            <label>Name<input id="c-name" placeholder="Mrs J. Smith"></label>
+            <label>Email<input id="c-email" type="email" placeholder="jsmith@example.com"></label>
+            <label class="span2">Address<input id="c-address" placeholder="12 High Street, Colchester CO1 1AA"></label>
+          </div>
+        </details>
+        <button id="analyse" class="btn primary">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6zM19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9z"/></svg>
+          <span>Analyse with AI</span>
+        </button>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="card" id="review-card">
+        <div class="step-row">
+          <div class="step"><span>2</span> Check the measurements</div>
+          <span id="source-badge" class="badge subtle hidden"></span>
+        </div>
+        <p class="muted">The AI only reads the request. You stay in control: edit any value and the price updates instantly.</p>
+        <div id="notice" class="notice hidden"></div>
+        <div id="items" class="items"><p class="empty">No items yet – describe a job above, or add one manually.</p></div>
+        <div class="add-row">
+          <select id="add-type" aria-label="Job type to add"></select>
+          <button id="add-item" class="btn ghost">+ Add item</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <aside class="col">
+      <div class="card sticky" id="quote-card">
+        <div class="step"><span>3</span> Quote</div>
+        <div id="quote"><p class="empty">Your priced quote will appear here.</p></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="wrap foot muted small">
+    Demo by Max Sandoval · Fictional business and indicative prices ·
+    AI extracts the job, a deterministic Python engine prices it ·
+    <a href="/docs">API docs</a>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
