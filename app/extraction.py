@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import time
 
 import httpx
 from pydantic import ValidationError
@@ -226,10 +227,15 @@ def ai_enabled() -> bool:
     return bool(os.getenv("GEMINI_API_KEY"))
 
 
-def extract_with_ai(description: str, timeout: float = 25.0) -> ExtractResponse:
-    key = os.environ["GEMINI_API_KEY"]
+def _call_gemini(body: dict, timeout: float) -> httpx.Response:
     model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    return httpx.post(url, json=body, headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]},
+                      timeout=httpx.Timeout(timeout, connect=10.0))
+
+
+def extract_with_ai(description: str, timeout: float | None = None) -> ExtractResponse:
+    timeout = timeout or float(os.getenv("GEMINI_TIMEOUT", "60"))
     body = {
         "system_instruction": {"parts": [{"text": SYSTEM_PROMPT.format(types=", ".join(JOB_TYPES))}]},
         "contents": [{"role": "user", "parts": [{"text": description}]}],
@@ -239,9 +245,24 @@ def extract_with_ai(description: str, timeout: float = 25.0) -> ExtractResponse:
             "responseSchema": RESPONSE_SCHEMA,
         },
     }
-    r = httpx.post(url, json=body, headers={"x-goog-api-key": key}, timeout=timeout)
-    r.raise_for_status()
-    text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+    # Newer Flash models "think" before answering, which is slow and unnecessary for
+    # simple extraction. Ask for minimal thinking; if the model rejects the option, retry without it.
+    thinking = os.getenv("GEMINI_THINKING_LEVEL", "low")
+    if thinking:
+        body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking}
+
+    started = time.perf_counter()
+    r = _call_gemini(body, timeout)
+    if r.status_code == 400 and "thinkingConfig" in body["generationConfig"]:
+        log.info("Model rejected thinkingConfig (%s); retrying without it", r.text[:200])
+        body["generationConfig"].pop("thinkingConfig")
+        r = _call_gemini(body, timeout)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
+    log.info("Gemini answered in %.1fs", time.perf_counter() - started)
+
+    parts = r.json()["candidates"][0]["content"]["parts"]
+    text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
     data = json.loads(text)
 
     items, dropped = [], 0

@@ -49,11 +49,10 @@ def test_unknown_work_asks_for_clarification():
 
 
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self._payload = payload
-
-    def raise_for_status(self):
-        pass
+        self.status_code = status_code
+        self.text = "error" if status_code >= 400 else ""
 
     def json(self):
         return {"candidates": [{"content": {"parts": [{"text": json.dumps(self._payload)}]}}]}
@@ -81,3 +80,26 @@ def test_ai_failure_falls_back_to_rules(monkeypatch):
     r = extract("a 10m fence")
     assert r.source == "rules" and r.items[0].type == "fence"
     assert "unavailable" in r.warning
+
+
+def test_ai_retries_without_thinking_config(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    calls = []
+
+    def fake_post(url, json, **k):
+        calls.append("thinkingConfig" in json["generationConfig"])
+        if len(calls) == 1:
+            return _FakeResponse({}, status_code=400)
+        return _FakeResponse({"items": [{"type": "fence", "length_m": 12}], "questions": []})
+
+    monkeypatch.setattr(extraction.httpx, "post", fake_post)
+    r = extract("a fence")
+    assert calls == [True, False]
+    assert r.source == "ai" and r.items[0].length_m == 12
+
+
+def test_ai_http_error_falls_back(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setattr(extraction.httpx, "post", lambda *a, **k: _FakeResponse({}, status_code=429))
+    r = extract("a 10m fence")
+    assert r.source == "rules"
