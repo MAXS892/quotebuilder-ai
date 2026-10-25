@@ -227,11 +227,37 @@ def ai_enabled() -> bool:
     return bool(os.getenv("GEMINI_API_KEY"))
 
 
-def _call_gemini(body: dict, timeout: float) -> httpx.Response:
-    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+DEFAULT_MODELS = "gemini-flash-latest,gemini-flash-lite-latest"
+RETRYABLE = {429, 500, 503, 504}   # rate limit / overloaded / transient server errors
+
+
+def _models() -> list[str]:
+    """GEMINI_MODEL may be a comma-separated list, tried in order (fallback chain)."""
+    return [m.strip() for m in os.getenv("GEMINI_MODEL", DEFAULT_MODELS).split(",") if m.strip()]
+
+
+def _post(model: str, body: dict, timeout: float) -> httpx.Response:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     return httpx.post(url, json=body, headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]},
                       timeout=httpx.Timeout(timeout, connect=10.0))
+
+
+def _call_gemini(body: dict, timeout: float) -> httpx.Response:
+    """Try each model in turn; move on when one is overloaded or rate-limited."""
+    last: httpx.Response | None = None
+    for model in _models():
+        r = _post(model, body, timeout)
+        if r.status_code == 400 and "thinkingConfig" in body["generationConfig"]:
+            log.info("%s rejected thinkingConfig; retrying without it", model)
+            body = {**body, "generationConfig": {k: v for k, v in body["generationConfig"].items()
+                                                 if k != "thinkingConfig"}}
+            r = _post(model, body, timeout)
+        if r.status_code not in RETRYABLE:
+            log.info("Gemini model used: %s", model)
+            return r
+        log.warning("%s unavailable (HTTP %s), trying next model", model, r.status_code)
+        last = r
+    return last
 
 
 def extract_with_ai(description: str, timeout: float | None = None) -> ExtractResponse:
@@ -253,10 +279,6 @@ def extract_with_ai(description: str, timeout: float | None = None) -> ExtractRe
 
     started = time.perf_counter()
     r = _call_gemini(body, timeout)
-    if r.status_code == 400 and "thinkingConfig" in body["generationConfig"]:
-        log.info("Model rejected thinkingConfig (%s); retrying without it", r.text[:200])
-        body["generationConfig"].pop("thinkingConfig")
-        r = _call_gemini(body, timeout)
     if r.status_code >= 400:
         raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
     log.info("Gemini answered in %.1fs", time.perf_counter() - started)

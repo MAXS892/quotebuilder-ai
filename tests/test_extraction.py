@@ -103,3 +103,20 @@ def test_ai_http_error_falls_back(monkeypatch):
     monkeypatch.setattr(extraction.httpx, "post", lambda *a, **k: _FakeResponse({}, status_code=429))
     r = extract("a 10m fence")
     assert r.source == "rules"
+
+
+def test_overloaded_model_falls_back_to_next_model(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setenv("GEMINI_MODEL", "model-a,model-b")
+    urls = []
+
+    def fake_post(url, json, **k):
+        urls.append(url)
+        if "model-a" in url:
+            return _FakeResponse({}, status_code=503)
+        return _FakeResponse({"items": [{"type": "patio", "area_m2": 30}], "questions": []})
+
+    monkeypatch.setattr(extraction.httpx, "post", fake_post)
+    r = extract("a big patio")
+    assert r.source == "ai" and r.items[0].area_m2 == 30
+    assert "model-a" in urls[0] and "model-b" in urls[1]

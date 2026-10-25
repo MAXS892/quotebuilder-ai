@@ -54,7 +54,7 @@ Adding a new job type = one pricing function + one entry in `JOB_TYPES`.
 ## Tech stack
 
 - **Backend:** Python 3.12, FastAPI, Pydantic v2
-- **AI:** Google Gemini (`gemini-flash-latest` alias, free tier; override with `GEMINI_MODEL`) with structured JSON output (`responseSchema`)
+- **AI:** Google Gemini (free tier) with structured JSON output (`responseSchema`), low thinking level for speed and a model fallback chain (`gemini-flash-latest` → `gemini-flash-lite-latest`, configurable with `GEMINI_MODEL`)
 - **PDF:** ReportLab
 - **Frontend:** plain HTML/CSS/JavaScript with no build step, responsive down to mobile
 - **Quality:** 22 pytest tests (pricing maths, parser, AI path mocked, API, PDF), GitHub Actions CI
