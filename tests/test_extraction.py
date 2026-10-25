@@ -120,3 +120,17 @@ def test_overloaded_model_falls_back_to_next_model(monkeypatch):
     r = extract("a big patio")
     assert r.source == "ai" and r.items[0].area_m2 == 30
     assert "model-a" in urls[0] and "model-b" in urls[1]
+
+
+def test_timeout_moves_to_next_model(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setenv("GEMINI_MODEL", "slow-model,fast-model")
+
+    def fake_post(url, json, **k):
+        if "slow-model" in url:
+            raise httpx.ReadTimeout("The read operation timed out")
+        return _FakeResponse({"items": [{"type": "fence", "length_m": 9}], "questions": []})
+
+    monkeypatch.setattr(extraction.httpx, "post", fake_post)
+    r = extract("a fence")
+    assert r.source == "ai" and r.items[0].length_m == 9

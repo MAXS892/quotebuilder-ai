@@ -243,25 +243,34 @@ def _post(model: str, body: dict, timeout: float) -> httpx.Response:
 
 
 def _call_gemini(body: dict, timeout: float) -> httpx.Response:
-    """Try each model in turn; move on when one is overloaded or rate-limited."""
+    """Try each model in turn; move on when one is overloaded, rate-limited or too slow."""
     last: httpx.Response | None = None
+    last_exc: Exception | None = None
     for model in _models():
-        r = _post(model, body, timeout)
-        if r.status_code == 400 and "thinkingConfig" in body["generationConfig"]:
-            log.info("%s rejected thinkingConfig; retrying without it", model)
-            body = {**body, "generationConfig": {k: v for k, v in body["generationConfig"].items()
-                                                 if k != "thinkingConfig"}}
+        started = time.perf_counter()
+        try:
             r = _post(model, body, timeout)
+            if r.status_code == 400 and "thinkingConfig" in body["generationConfig"]:
+                log.info("%s rejected thinkingConfig; retrying without it", model)
+                body = {**body, "generationConfig": {k: v for k, v in body["generationConfig"].items()
+                                                     if k != "thinkingConfig"}}
+                r = _post(model, body, timeout)
+        except httpx.TimeoutException as exc:
+            log.warning("%s timed out after %.0fs, trying next model", model, time.perf_counter() - started)
+            last_exc = exc
+            continue
         if r.status_code not in RETRYABLE:
-            log.info("Gemini model used: %s", model)
+            log.info("Gemini model used: %s (%.1fs)", model, time.perf_counter() - started)
             return r
         log.warning("%s unavailable (HTTP %s), trying next model", model, r.status_code)
         last = r
-    return last
+    if last is not None:
+        return last
+    raise last_exc or RuntimeError("No Gemini model configured")
 
 
 def extract_with_ai(description: str, timeout: float | None = None) -> ExtractResponse:
-    timeout = timeout or float(os.getenv("GEMINI_TIMEOUT", "60"))
+    timeout = timeout or float(os.getenv("GEMINI_TIMEOUT", "20"))  # per model
     body = {
         "system_instruction": {"parts": [{"text": SYSTEM_PROMPT.format(types=", ".join(JOB_TYPES))}]},
         "contents": [{"role": "user", "parts": [{"text": description}]}],
