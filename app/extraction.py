@@ -228,7 +228,7 @@ def ai_enabled() -> bool:
 
 def extract_with_ai(description: str, timeout: float = 25.0) -> ExtractResponse:
     key = os.environ["GEMINI_API_KEY"]
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     body = {
         "system_instruction": {"parts": [{"text": SYSTEM_PROMPT.format(types=", ".join(JOB_TYPES))}]},
